@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.0
+- Implement 6x8 link-match gameplay with drag-to-chain matching and combo scoring.
+- Add tile collapse/refill with quick drop animation and in-game combo HUD display.
+- Update help modal to reflect 60-second link-match rules.
+
 ## v0.1.2
 - Switch UI to a light theme with updated HUD cards, status badge, buttons, and safe-area padding.
 - Add a Help modal with upcoming feature notes and control guidance.

@@ -17,6 +17,7 @@ function App() {
     timeLeftMs,
     score,
     bestScore,
+    combo,
     soundEnabled,
     sessionId,
     startGame,
@@ -66,7 +67,7 @@ function App() {
   }, [gameState, sessionId, timeLeftMs, endGame, setTimeLeftMs]);
 
   const statusLabel = useMemo(() => {
-    if (gameState === 'MENU') return 'Ready';
+    if (gameState === 'READY') return 'Ready';
     if (gameState === 'PLAYING') return 'Go!';
     return 'Time Up';
   }, [gameState]);
@@ -91,6 +92,9 @@ function App() {
           </span>
           <span className="text-2xl font-semibold tabular-nums text-slate-900">
             {score}
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.35em] text-emerald-500">
+            Combo {combo}
           </span>
         </div>
         <div className="flex flex-col">
@@ -155,13 +159,12 @@ function App() {
               </button>
             </div>
             <div className="mt-4 space-y-3 text-sm leading-relaxed">
-              <p>현재는 부트스트랩 단계입니다.</p>
-              <p>다음 업데이트: 60초 링크-매치(드래그로 같은 색 연결)</p>
+              <p>60초 안에 같은 색 타일을 이어서 콤보를 쌓으세요.</p>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-slate-600">
                 <p>조작 안내</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
-                  <li>터치/드래그로 매칭하세요.</li>
-                  <li>Start로 게임을 시작하세요.</li>
+                  <li>같은 색 타일을 드래그로 3개 이상 연결합니다.</li>
+                  <li>빠르게 연속 제거하면 콤보 보너스가 붙습니다.</li>
                   <li>Restart로 빠르게 재시작할 수 있어요.</li>
                 </ul>
               </div>

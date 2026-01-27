@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { z } from 'zod';
 
-export type GameState = 'MENU' | 'PLAYING' | 'ENDED';
+export type GameState = 'READY' | 'PLAYING' | 'ENDED';
 
 const DEFAULT_TIME_MS = 60_000;
 const BEST_SCORE_KEY = 'omc_highscore';
@@ -28,6 +28,7 @@ interface GameStore {
   timeLeftMs: number;
   score: number;
   bestScore: number;
+  combo: number;
   soundEnabled: boolean;
   sessionId: number;
   startGame: () => void;
@@ -35,15 +36,17 @@ interface GameStore {
   endGame: () => void;
   setTimeLeftMs: (ms: number) => void;
   addScore: (amount?: number) => void;
+  setCombo: (combo: number) => void;
   toggleSound: () => void;
   setBestScore: (score: number) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
-  gameState: 'MENU',
+  gameState: 'READY',
   timeLeftMs: DEFAULT_TIME_MS,
   score: 0,
   bestScore: loadBestScore(),
+  combo: 0,
   soundEnabled: true,
   sessionId: 0,
   startGame: () =>
@@ -51,6 +54,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       gameState: 'PLAYING',
       timeLeftMs: DEFAULT_TIME_MS,
       score: 0,
+      combo: 0,
       sessionId: get().sessionId + 1,
     }),
   restartGame: () =>
@@ -58,6 +62,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       gameState: 'PLAYING',
       timeLeftMs: DEFAULT_TIME_MS,
       score: 0,
+      combo: 0,
       sessionId: get().sessionId + 1,
     }),
   endGame: () => {
@@ -79,6 +84,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({ bestScore: nextScore });
     }
   },
+  setCombo: (combo) => set({ combo: Math.max(0, combo) }),
   toggleSound: () => set((state) => ({ soundEnabled: !state.soundEnabled })),
   setBestScore: (score) => {
     saveBestScore(score);
