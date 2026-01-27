@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #0b0f17;
+  color: #f8fafc;
+}
+
+canvas {
+  display: block;
+}
