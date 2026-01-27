@@ -16,12 +16,14 @@ html,
 body,
 #root {
   height: 100%;
+  overscroll-behavior: none;
 }
 
 body {
   margin: 0;
-  overscroll-behavior: none;
   touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
   font-family: 'Inter', system-ui, sans-serif;
   background: #f7f8fb;
   color: #0f172a;
@@ -29,6 +31,7 @@ body {
 
 canvas {
   display: block;
+  touch-action: none;
 }
 
 .safe-area-y {
