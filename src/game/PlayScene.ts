@@ -7,6 +7,9 @@ const TYPES = 6;
 const DRAG_MATCH_MIN = 3;
 const COMBO_WINDOW_MS = 1200;
 const DROP_DURATION_MS = 160;
+const SHOW_TILE_LABELS =
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('debugLabels') === '1';
 
 const TILE_COLORS = [
   0x38bdf8,
@@ -25,7 +28,7 @@ interface Tile {
   col: number;
   type: number;
   sprite: TileSprite;
-  label: TileLabel;
+  label: TileLabel | null;
 }
 
 export class PlayScene extends Phaser.Scene {
@@ -91,13 +94,7 @@ export class PlayScene extends Phaser.Scene {
         const position = this.getTilePosition(row, col);
         const sprite = this.add.circle(position.x, position.y, this.tileRadius, TILE_COLORS[type]);
         sprite.setStrokeStyle(2, 0x0f172a);
-        const label = this.add
-          .text(position.x, position.y, `${type + 1}`, {
-            fontFamily: 'system-ui, sans-serif',
-            fontSize: `${Math.max(12, Math.floor(this.tileRadius * 0.9))}px`,
-            color: '#0f172a',
-          })
-          .setOrigin(0.5);
+        const label = this.createTileLabel(position.x, position.y, type);
         this.board[row][col] = { row, col, type, sprite, label };
       }
     }
@@ -109,7 +106,7 @@ export class PlayScene extends Phaser.Scene {
       for (const tile of row) {
         if (!tile) continue;
         tile.sprite.destroy();
-        tile.label.destroy();
+        tile.label?.destroy();
       }
     }
     this.createBoard();
@@ -137,9 +134,11 @@ export class PlayScene extends Phaser.Scene {
         tile.sprite.setPosition(pos.x, pos.y);
         tile.sprite.setRadius(this.tileRadius);
         tile.sprite.setStrokeStyle(2, 0x0f172a);
-        tile.label
-          .setPosition(pos.x, pos.y)
-          .setFontSize(`${Math.max(12, Math.floor(this.tileRadius * 0.9))}px`);
+        if (tile.label) {
+          tile.label
+            .setPosition(pos.x, pos.y)
+            .setFontSize(`${Math.max(12, Math.floor(this.tileRadius * 0.9))}px`);
+        }
       }
     }
     this.redrawPath();
@@ -194,11 +193,15 @@ export class PlayScene extends Phaser.Scene {
     if (isActive) {
       tile.sprite.setScale(1.08);
       tile.sprite.setStrokeStyle(4, 0xffffff);
-      tile.label.setScale(1.08);
+      if (tile.label) {
+        tile.label.setScale(1.08);
+      }
     } else {
       tile.sprite.setScale(1);
       tile.sprite.setStrokeStyle(2, 0x0f172a);
-      tile.label.setScale(1);
+      if (tile.label) {
+        tile.label.setScale(1);
+      }
     }
   }
 
@@ -257,15 +260,16 @@ export class PlayScene extends Phaser.Scene {
       const total = tiles.length;
       for (const tile of tiles) {
         this.board[tile.row][tile.col] = null;
+        const targets = tile.label ? [tile.sprite, tile.label] : [tile.sprite];
         this.tweens.add({
-          targets: [tile.sprite, tile.label],
+          targets,
           scale: 0,
           alpha: 0,
           duration: 120,
           ease: 'Back.in',
           onComplete: () => {
             tile.sprite.destroy();
-            tile.label.destroy();
+            tile.label?.destroy();
             completed += 1;
             if (completed >= total) {
               resolve();
@@ -300,13 +304,7 @@ export class PlayScene extends Phaser.Scene {
         const targetPos = this.getTilePosition(row, col);
         const sprite = this.add.circle(startPos.x, startPos.y, this.tileRadius, TILE_COLORS[type]);
         sprite.setStrokeStyle(2, 0x0f172a);
-        const label = this.add
-          .text(startPos.x, startPos.y, `${type + 1}`, {
-            fontFamily: 'system-ui, sans-serif',
-            fontSize: `${Math.max(12, Math.floor(this.tileRadius * 0.9))}px`,
-            color: '#0f172a',
-          })
-          .setOrigin(0.5);
+        const label = this.createTileLabel(startPos.x, startPos.y, type);
         const tile: Tile = { row, col, type, sprite, label };
         this.board[row][col] = tile;
         tweens.push(this.tweenTile(tile, targetPos.x, targetPos.y));
@@ -317,8 +315,9 @@ export class PlayScene extends Phaser.Scene {
 
   private tweenTile(tile: Tile, x: number, y: number) {
     return new Promise<void>((resolve) => {
+      const targets = tile.label ? [tile.sprite, tile.label] : [tile.sprite];
       this.tweens.add({
-        targets: [tile.sprite, tile.label],
+        targets,
         x,
         y,
         duration: DROP_DURATION_MS,
@@ -326,6 +325,17 @@ export class PlayScene extends Phaser.Scene {
         onComplete: () => resolve(),
       });
     });
+  }
+
+  private createTileLabel(x: number, y: number, type: number) {
+    if (!SHOW_TILE_LABELS) return null;
+    return this.add
+      .text(x, y, `${type + 1}`, {
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: `${Math.max(12, Math.floor(this.tileRadius * 0.9))}px`,
+        color: '#0f172a',
+      })
+      .setOrigin(0.5);
   }
 
   private getTileFromPointer(pointer: Phaser.Input.Pointer) {

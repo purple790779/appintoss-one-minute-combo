@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.1
+- fix: default tile debug labels to off and allow opt-in via ?debugLabels=1.
+- fix: prevent mobile overscroll, tap highlights, and touch gestures from interfering with gameplay.
+- chore: ignore local artifacts in git.
+
 ## v0.4.0
 - feat: add link-match drag chain rules with backtrack support, collapse/refill, and combo scoring window.
 - ui: show combo HUD state and refresh help modal instructions for link-match play.
