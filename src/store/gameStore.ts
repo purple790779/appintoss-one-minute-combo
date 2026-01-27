@@ -29,6 +29,7 @@ interface GameStore {
   score: number;
   bestScore: number;
   combo: number;
+  lastClearAtMs: number;
   soundEnabled: boolean;
   sessionId: number;
   startGame: () => void;
@@ -37,6 +38,8 @@ interface GameStore {
   setTimeLeftMs: (ms: number) => void;
   addScore: (amount?: number) => void;
   setCombo: (combo: number) => void;
+  resetCombo: () => void;
+  setLastClearAtMs: (ms: number) => void;
   toggleSound: () => void;
   setBestScore: (score: number) => void;
 }
@@ -47,6 +50,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   score: 0,
   bestScore: loadBestScore(),
   combo: 0,
+  lastClearAtMs: 0,
   soundEnabled: true,
   sessionId: 0,
   startGame: () =>
@@ -55,6 +59,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       timeLeftMs: DEFAULT_TIME_MS,
       score: 0,
       combo: 0,
+      lastClearAtMs: 0,
       sessionId: get().sessionId + 1,
     }),
   restartGame: () =>
@@ -63,6 +68,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       timeLeftMs: DEFAULT_TIME_MS,
       score: 0,
       combo: 0,
+      lastClearAtMs: 0,
       sessionId: get().sessionId + 1,
     }),
   endGame: () => {
@@ -85,6 +91,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
   },
   setCombo: (combo) => set({ combo: Math.max(0, combo) }),
+  resetCombo: () => set({ combo: 0 }),
+  setLastClearAtMs: (ms) => set({ lastClearAtMs: Math.max(0, ms) }),
   toggleSound: () => set((state) => ({ soundEnabled: !state.soundEnabled })),
   setBestScore: (score) => {
     saveBestScore(score);

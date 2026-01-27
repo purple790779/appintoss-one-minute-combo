@@ -18,12 +18,14 @@ const TILE_COLORS = [
 ];
 
 type TileSprite = Phaser.GameObjects.Arc;
+type TileLabel = Phaser.GameObjects.Text;
 
 interface Tile {
   row: number;
   col: number;
   type: number;
   sprite: TileSprite;
+  label: TileLabel;
 }
 
 export class PlayScene extends Phaser.Scene {
@@ -36,7 +38,6 @@ export class PlayScene extends Phaser.Scene {
   private activeType: number | null = null;
   private lineGraphics?: Phaser.GameObjects.Graphics;
   private inputLocked = true;
-  private lastClearAt = -Infinity;
   private unsubscribe?: () => void;
 
   constructor() {
@@ -75,7 +76,6 @@ export class PlayScene extends Phaser.Scene {
   private applyGameState(gameState: GameState) {
     if (gameState === 'PLAYING') {
       this.inputLocked = false;
-      this.lastClearAt = -Infinity;
       this.clearPath();
       return;
     }
@@ -91,7 +91,14 @@ export class PlayScene extends Phaser.Scene {
         const position = this.getTilePosition(row, col);
         const sprite = this.add.circle(position.x, position.y, this.tileRadius, TILE_COLORS[type]);
         sprite.setStrokeStyle(2, 0x0f172a);
-        this.board[row][col] = { row, col, type, sprite };
+        const label = this.add
+          .text(position.x, position.y, `${type + 1}`, {
+            fontFamily: 'system-ui, sans-serif',
+            fontSize: `${Math.max(12, Math.floor(this.tileRadius * 0.9))}px`,
+            color: '#0f172a',
+          })
+          .setOrigin(0.5);
+        this.board[row][col] = { row, col, type, sprite, label };
       }
     }
   }
@@ -100,7 +107,9 @@ export class PlayScene extends Phaser.Scene {
     this.clearPath();
     for (const row of this.board) {
       for (const tile of row) {
-        tile?.sprite.destroy();
+        if (!tile) continue;
+        tile.sprite.destroy();
+        tile.label.destroy();
       }
     }
     this.createBoard();
@@ -128,6 +137,9 @@ export class PlayScene extends Phaser.Scene {
         tile.sprite.setPosition(pos.x, pos.y);
         tile.sprite.setRadius(this.tileRadius);
         tile.sprite.setStrokeStyle(2, 0x0f172a);
+        tile.label
+          .setPosition(pos.x, pos.y)
+          .setFontSize(`${Math.max(12, Math.floor(this.tileRadius * 0.9))}px`);
       }
     }
     this.redrawPath();
@@ -182,9 +194,11 @@ export class PlayScene extends Phaser.Scene {
     if (isActive) {
       tile.sprite.setScale(1.08);
       tile.sprite.setStrokeStyle(4, 0xffffff);
+      tile.label.setScale(1.08);
     } else {
       tile.sprite.setScale(1);
       tile.sprite.setStrokeStyle(2, 0x0f172a);
+      tile.label.setScale(1);
     }
   }
 
@@ -219,9 +233,13 @@ export class PlayScene extends Phaser.Scene {
 
     const now = this.time.now;
     const store = useGameStore.getState();
-    const nextCombo = now - this.lastClearAt <= COMBO_WINDOW_MS ? store.combo + 1 : 0;
-    useGameStore.getState().setCombo(nextCombo);
-    this.lastClearAt = now;
+    const lastClearAtMs = store.lastClearAtMs;
+    const nextCombo =
+      lastClearAtMs > 0 && now - lastClearAtMs <= COMBO_WINDOW_MS
+        ? store.combo + 1
+        : 0;
+    store.setCombo(nextCombo);
+    store.setLastClearAtMs(now);
 
     const baseScore = tiles.length * tiles.length * 10;
     const scoreMultiplier = 1 + nextCombo * 0.15;
@@ -240,13 +258,14 @@ export class PlayScene extends Phaser.Scene {
       for (const tile of tiles) {
         this.board[tile.row][tile.col] = null;
         this.tweens.add({
-          targets: tile.sprite,
+          targets: [tile.sprite, tile.label],
           scale: 0,
           alpha: 0,
           duration: 120,
           ease: 'Back.in',
           onComplete: () => {
             tile.sprite.destroy();
+            tile.label.destroy();
             completed += 1;
             if (completed >= total) {
               resolve();
@@ -269,7 +288,7 @@ export class PlayScene extends Phaser.Scene {
           this.board[row][col] = null;
           tile.row = writeRow;
           const target = this.getTilePosition(writeRow, col);
-          tweens.push(this.tweenTile(tile.sprite, target.x, target.y));
+          tweens.push(this.tweenTile(tile, target.x, target.y));
         }
         writeRow -= 1;
       }
@@ -281,18 +300,25 @@ export class PlayScene extends Phaser.Scene {
         const targetPos = this.getTilePosition(row, col);
         const sprite = this.add.circle(startPos.x, startPos.y, this.tileRadius, TILE_COLORS[type]);
         sprite.setStrokeStyle(2, 0x0f172a);
-        const tile: Tile = { row, col, type, sprite };
+        const label = this.add
+          .text(startPos.x, startPos.y, `${type + 1}`, {
+            fontFamily: 'system-ui, sans-serif',
+            fontSize: `${Math.max(12, Math.floor(this.tileRadius * 0.9))}px`,
+            color: '#0f172a',
+          })
+          .setOrigin(0.5);
+        const tile: Tile = { row, col, type, sprite, label };
         this.board[row][col] = tile;
-        tweens.push(this.tweenTile(sprite, targetPos.x, targetPos.y));
+        tweens.push(this.tweenTile(tile, targetPos.x, targetPos.y));
       }
     }
     await Promise.all(tweens);
   }
 
-  private tweenTile(sprite: TileSprite, x: number, y: number) {
+  private tweenTile(tile: Tile, x: number, y: number) {
     return new Promise<void>((resolve) => {
       this.tweens.add({
-        targets: sprite,
+        targets: [tile.sprite, tile.label],
         x,
         y,
         duration: DROP_DURATION_MS,

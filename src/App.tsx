@@ -93,8 +93,12 @@ function App() {
           <span className="text-2xl font-semibold tabular-nums text-slate-900">
             {score}
           </span>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.35em] text-emerald-500">
-            Combo {combo}
+          <span
+            className={`text-[10px] font-semibold uppercase tracking-[0.35em] ${
+              combo > 0 ? 'text-emerald-500' : 'text-slate-300'
+            }`}
+          >
+            콤보 x{combo}
           </span>
         </div>
         <div className="flex flex-col">
@@ -165,6 +169,7 @@ function App() {
                 <ul className="mt-2 list-disc space-y-1 pl-5">
                   <li>같은 색 타일을 상하좌우로 드래그해 3개 이상 연결하세요.</li>
                   <li>경로는 재방문할 수 없고, 직전 타일 한 칸만 되돌릴 수 있어요.</li>
+                  <li>손을 떼면 연결이 확정되며, 3개 미만이면 취소됩니다.</li>
                   <li>1.2초 안에 연속 제거하면 콤보 보너스가 붙습니다.</li>
                   <li>Restart로 빠르게 재시작할 수 있어요.</li>
                 </ul>
