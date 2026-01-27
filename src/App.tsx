@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createGame } from './game/createGame';
 import { useGameStore } from './store/gameStore';
 
@@ -25,6 +25,7 @@ function App() {
     setTimeLeftMs,
     toggleSound,
   } = useGameStore();
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   const phaserContainerRef = useRef<HTMLDivElement | null>(null);
   const phaserGameRef = useRef<ReturnType<typeof createGame> | null>(null);
@@ -74,13 +75,13 @@ function App() {
   const handleAction = gameState === 'PLAYING' ? restartGame : startGame;
 
   return (
-    <div className="flex min-h-full flex-col items-center gap-6 px-4 py-6">
-      <header className="flex w-full max-w-3xl flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-slate-200 shadow-lg">
+    <div className="safe-area-y flex min-h-full flex-col items-center gap-6 px-4">
+      <header className="flex w-full max-w-3xl flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-700 shadow-md">
         <div className="flex flex-col">
           <span className="text-xs uppercase tracking-widest text-slate-400">
             Time
           </span>
-          <span className="text-lg font-semibold tabular-nums">
+          <span className="text-2xl font-semibold tabular-nums text-slate-900">
             {formatTime(timeLeftMs)}
           </span>
         </div>
@@ -88,46 +89,86 @@ function App() {
           <span className="text-xs uppercase tracking-widest text-slate-400">
             Score
           </span>
-          <span className="text-lg font-semibold tabular-nums">{score}</span>
+          <span className="text-2xl font-semibold tabular-nums text-slate-900">
+            {score}
+          </span>
         </div>
         <div className="flex flex-col">
           <span className="text-xs uppercase tracking-widest text-slate-400">
             Best
           </span>
-          <span className="text-lg font-semibold tabular-nums">
+          <span className="text-2xl font-semibold tabular-nums text-slate-900">
             {bestScore}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={toggleSound}
-          className="rounded-full border border-slate-600 px-3 py-1 text-xs uppercase tracking-widest text-slate-200 transition hover:border-slate-400"
-        >
-          Sound: {soundEnabled ? 'On' : 'Off'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsHelpOpen(true)}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-widest text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-800"
+          >
+            Help
+          </button>
+          <button
+            type="button"
+            onClick={toggleSound}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-widest text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-800"
+          >
+            Sound: {soundEnabled ? 'On' : 'Off'}
+          </button>
+        </div>
       </header>
 
       <main className="flex w-full max-w-3xl flex-1 flex-col items-center gap-4">
-        <div className="text-sm uppercase tracking-[0.3em] text-emerald-300">
+        <div className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-700 shadow-sm">
           {statusLabel}
         </div>
-        <div className="flex w-full max-w-lg items-center justify-center rounded-3xl border border-slate-700 bg-slate-950/70 p-4 shadow-2xl">
+        <div className="flex w-full max-w-lg items-center justify-center rounded-3xl border border-slate-200 bg-white p-4 shadow-xl">
           <div
             ref={phaserContainerRef}
-            className="h-[480px] w-[360px] overflow-hidden rounded-2xl"
+            className="h-[70vh] max-h-[480px] w-[90vw] max-w-[360px] overflow-hidden rounded-2xl bg-slate-50"
           />
         </div>
       </main>
 
-      <footer className="flex w-full max-w-3xl items-center justify-center pb-4">
+      <footer className="flex w-full max-w-3xl items-center justify-center">
         <button
           type="button"
           onClick={handleAction}
-          className="rounded-full bg-emerald-400 px-8 py-3 text-sm font-semibold uppercase tracking-widest text-slate-950 shadow-lg transition hover:bg-emerald-300"
+          className="rounded-full bg-emerald-500 px-10 py-3 text-sm font-semibold uppercase tracking-widest text-white shadow-lg transition active:translate-y-0.5 active:shadow-md"
         >
           {buttonLabel}
         </button>
       </footer>
+
+      {isHelpOpen ? (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-900/40 px-4">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 text-slate-700 shadow-2xl">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-lg font-semibold text-slate-900">Help</h2>
+              <button
+                type="button"
+                onClick={() => setIsHelpOpen(false)}
+                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-4 space-y-3 text-sm leading-relaxed">
+              <p>현재는 부트스트랩 단계입니다.</p>
+              <p>다음 업데이트: 60초 링크-매치(드래그로 같은 색 연결)</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-slate-600">
+                <p>조작 안내</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  <li>터치/드래그로 매칭하세요.</li>
+                  <li>Start로 게임을 시작하세요.</li>
+                  <li>Restart로 빠르게 재시작할 수 있어요.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
