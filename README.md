@@ -5,6 +5,7 @@ Vite + React + TypeScript bootstrap for the One Minute Combo prototype.
 ## Version
 
 See [VERSION.txt](./VERSION.txt).
+Release checklist: [APPINTOSS_RELEASE_CHECKLIST.md](./APPINTOSS_RELEASE_CHECKLIST.md).
 
 ## Requirements
 
