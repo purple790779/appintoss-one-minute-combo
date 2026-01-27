@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.2.1
+- Add PR build check workflow.
+
 ## v0.2.0
 - Implement 6x8 link-match gameplay with drag-to-chain matching and combo scoring.
 - Add tile collapse/refill with quick drop animation and in-game combo HUD display.
