@@ -163,8 +163,9 @@ function App() {
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-slate-600">
                 <p>조작 안내</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
-                  <li>같은 색 타일을 드래그로 3개 이상 연결합니다.</li>
-                  <li>빠르게 연속 제거하면 콤보 보너스가 붙습니다.</li>
+                  <li>같은 색 타일을 상하좌우로 드래그해 3개 이상 연결하세요.</li>
+                  <li>경로는 재방문할 수 없고, 직전 타일 한 칸만 되돌릴 수 있어요.</li>
+                  <li>1.2초 안에 연속 제거하면 콤보 보너스가 붙습니다.</li>
                   <li>Restart로 빠르게 재시작할 수 있어요.</li>
                 </ul>
               </div>
