@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.2.2
+- docs: add appintoss release checklist
+
 ## v0.2.1
 - Add PR build check workflow.
 
