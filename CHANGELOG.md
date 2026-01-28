@@ -1,7 +1,7 @@
 # Changelog
 
 ## v0.4.4
-- fix: mobile drag-chain input fix: hit-test + update polling.
+- fix: mobile drag-chain input fix (positionToCamera + bounds hit-test + polling).
 
 ## v0.4.3
 - mobile: fixed bottom START bar (never hidden).
