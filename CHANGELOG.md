@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.3
+- mobile: fixed bottom START bar (never hidden).
+- safe-area + real vh handling.
+- prevent page scroll/overscroll; modal keeps internal scroll.
+
 ## v0.4.2
 - fix: mobile drag-chain input now uses hit-test based selection.
 - fix: no-scroll layout using 100dvh + overflow hidden (Chrome address bar issue).
