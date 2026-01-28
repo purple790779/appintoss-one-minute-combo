@@ -47,7 +47,8 @@ export class PlayScene extends Phaser.Scene {
   private inputLocked = true;
   private unsubscribe?: () => void;
   private isSelecting = false;
-  private activePointerId: number | null = null;
+  private dragPointerId: number | null = null;
+  private ignoreMouseWhileTouch = false;
   private debugText?: Phaser.GameObjects.Text;
   private downCount = 0;
   private moveCount = 0;
@@ -180,13 +181,17 @@ export class PlayScene extends Phaser.Scene {
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       this.downCount += 1;
       if (this.inputLocked) return;
-      if (this.activePointerId !== null && this.activePointerId !== pointer.id) return;
+      if (this.ignoreMouseWhileTouch && this.isMousePointer(pointer)) return;
+      if (this.dragPointerId !== null) return;
+      if (this.isTouchPointer(pointer)) {
+        this.ignoreMouseWhileTouch = true;
+      }
       const p = this.getPointerWorld(pointer);
       const tile = this.resolveTileAtWorld(p.x, p.y);
       if (!tile) {
         return;
       }
-      this.activePointerId = pointer.id;
+      this.dragPointerId = pointer.id;
       this.activeType = tile.type;
       this.activePath = [tile];
       this.highlightTile(tile, true);
@@ -199,7 +204,8 @@ export class PlayScene extends Phaser.Scene {
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       this.moveCount += 1;
       if (this.inputLocked || !this.isSelecting) return;
-      if (this.activePointerId !== pointer.id) return;
+      if (this.ignoreMouseWhileTouch && this.isMousePointer(pointer)) return;
+      if (this.dragPointerId !== pointer.id) return;
       const p = this.getPointerWorld(pointer);
       const tile = this.resolveTileAtWorld(p.x, p.y);
       this.lastHitTile = tile;
@@ -208,14 +214,16 @@ export class PlayScene extends Phaser.Scene {
 
     const finishPath = (pointer: Phaser.Input.Pointer) => {
       if (this.inputLocked) return;
-      if (this.activePointerId !== pointer.id) return;
+      if (this.ignoreMouseWhileTouch && this.isMousePointer(pointer)) return;
+      if (this.dragPointerId !== pointer.id) return;
       if (this.activePath.length >= DRAG_MATCH_MIN) {
         void this.resolveMatch(this.activePath);
       } else {
         this.clearPath();
       }
       this.isSelecting = false;
-      this.activePointerId = null;
+      this.dragPointerId = null;
+      this.ignoreMouseWhileTouch = false;
     };
 
     this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
@@ -223,6 +231,10 @@ export class PlayScene extends Phaser.Scene {
       finishPath(pointer);
     });
     this.input.on('pointerupoutside', (pointer: Phaser.Input.Pointer) => {
+      this.upCount += 1;
+      finishPath(pointer);
+    });
+    this.input.on('pointercancel', (pointer: Phaser.Input.Pointer) => {
       this.upCount += 1;
       finishPath(pointer);
     });
@@ -234,7 +246,11 @@ export class PlayScene extends Phaser.Scene {
       return;
     }
     const pointer = this.input.activePointer;
-    if (this.activePointerId !== pointer.id) {
+    if (this.ignoreMouseWhileTouch && this.isMousePointer(pointer)) {
+      this.updateDebugOverlay();
+      return;
+    }
+    if (this.dragPointerId !== pointer.id) {
       this.updateDebugOverlay();
       return;
     }
@@ -313,7 +329,8 @@ export class PlayScene extends Phaser.Scene {
     this.activePath = [];
     this.activeType = null;
     this.isSelecting = false;
-    this.activePointerId = null;
+    this.dragPointerId = null;
+    this.ignoreMouseWhileTouch = false;
     this.redrawPath();
   }
 
@@ -485,6 +502,16 @@ export class PlayScene extends Phaser.Scene {
 
   private getPointerWorld(pointer: Phaser.Input.Pointer) {
     return { x: pointer.worldX, y: pointer.worldY };
+  }
+
+  private isMousePointer(pointer: Phaser.Input.Pointer) {
+    const pointerType = (pointer.event as PointerEvent | undefined)?.pointerType;
+    return pointerType === 'mouse' || !pointer.wasTouch;
+  }
+
+  private isTouchPointer(pointer: Phaser.Input.Pointer) {
+    const pointerType = (pointer.event as PointerEvent | undefined)?.pointerType;
+    return pointer.wasTouch || (pointerType !== undefined && pointerType !== 'mouse');
   }
 
   private getTilePosition(row: number, col: number) {
