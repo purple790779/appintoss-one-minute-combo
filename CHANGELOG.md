@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.2
+- fix: mobile drag-chain input now uses hit-test based selection.
+- fix: no-scroll layout using 100dvh + overflow hidden (Chrome address bar issue).
+
 ## v0.4.1
 - fix: default tile debug labels to off and allow opt-in via ?debugLabels=1.
 - fix: prevent mobile overscroll, tap highlights, and touch gestures from interfering with gameplay.

@@ -42,6 +42,7 @@ export class PlayScene extends Phaser.Scene {
   private lineGraphics?: Phaser.GameObjects.Graphics;
   private inputLocked = true;
   private unsubscribe?: () => void;
+  private isPointerActive = false;
 
   constructor() {
     super('PlayScene');
@@ -153,27 +154,7 @@ export class PlayScene extends Phaser.Scene {
       this.activePath = [tile];
       this.highlightTile(tile, true);
       this.redrawPath();
-    });
-
-    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      if (this.inputLocked || !pointer.isDown || this.activeType === null) return;
-      const tile = this.getTileFromPointer(pointer);
-      if (!tile || tile.type !== this.activeType) return;
-      const last = this.activePath[this.activePath.length - 1];
-      if (!last) return;
-      const isAdjacent = Math.abs(tile.row - last.row) + Math.abs(tile.col - last.col) === 1;
-      if (!isAdjacent) return;
-      const existingIndex = this.activePath.indexOf(tile);
-      if (existingIndex === this.activePath.length - 2) {
-        const removed = this.activePath.pop();
-        if (removed) this.highlightTile(removed, false);
-        this.redrawPath();
-        return;
-      }
-      if (existingIndex !== -1) return;
-      this.activePath.push(tile);
-      this.highlightTile(tile, true);
-      this.redrawPath();
+      this.isPointerActive = true;
     });
 
     const finishPath = () => {
@@ -183,10 +164,38 @@ export class PlayScene extends Phaser.Scene {
       } else {
         this.clearPath();
       }
+      this.isPointerActive = false;
     };
 
     this.input.on('pointerup', finishPath);
     this.input.on('pointerupoutside', finishPath);
+  }
+
+  update() {
+    if (this.inputLocked || this.activeType === null || !this.isPointerActive) return;
+    const pointer = this.input.activePointer;
+    if (!pointer.isDown) return;
+    this.extendPathFromPointer(pointer);
+  }
+
+  private extendPathFromPointer(pointer: Phaser.Input.Pointer) {
+    const tile = this.getTileFromPointer(pointer);
+    if (!tile || tile.type !== this.activeType) return;
+    const last = this.activePath[this.activePath.length - 1];
+    if (!last) return;
+    const isAdjacent = Math.abs(tile.row - last.row) + Math.abs(tile.col - last.col) === 1;
+    if (!isAdjacent) return;
+    const existingIndex = this.activePath.indexOf(tile);
+    if (existingIndex === this.activePath.length - 2) {
+      const removed = this.activePath.pop();
+      if (removed) this.highlightTile(removed, false);
+      this.redrawPath();
+      return;
+    }
+    if (existingIndex !== -1) return;
+    this.activePath.push(tile);
+    this.highlightTile(tile, true);
+    this.redrawPath();
   }
 
   private highlightTile(tile: Tile, isActive: boolean) {
@@ -211,6 +220,7 @@ export class PlayScene extends Phaser.Scene {
     }
     this.activePath = [];
     this.activeType = null;
+    this.isPointerActive = false;
     this.redrawPath();
   }
 
@@ -339,8 +349,16 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private getTileFromPointer(pointer: Phaser.Input.Pointer) {
-    const col = Math.floor((pointer.worldX - this.boardLeft) / this.tileSize);
-    const row = Math.floor((pointer.worldY - this.boardTop) / this.tileSize);
+    return this.getTileFromWorld(pointer.worldX, pointer.worldY);
+  }
+
+  private getTileFromWorld(x: number, y: number) {
+    const col = Math.floor((x - this.boardLeft) / this.tileSize);
+    const row = Math.floor((y - this.boardTop) / this.tileSize);
+    return this.getTileAt(row, col);
+  }
+
+  private getTileAt(row: number, col: number) {
     if (row < 0 || row >= ROWS || col < 0 || col >= COLS) {
       return null;
     }
