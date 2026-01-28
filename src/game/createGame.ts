@@ -13,6 +13,13 @@ export const createGame = (parent: string | HTMLElement) => {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
     },
+    input: {
+      activePointers: 1,
+      touch: {
+        capture: true,
+      },
+    },
+    disableContextMenu: true,
     scene: [BootScene, PlayScene],
   });
 };
