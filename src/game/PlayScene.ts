@@ -42,7 +42,7 @@ export class PlayScene extends Phaser.Scene {
   private lineGraphics?: Phaser.GameObjects.Graphics;
   private inputLocked = true;
   private unsubscribe?: () => void;
-  private isPointerActive = false;
+  private isSelecting = false;
 
   constructor() {
     super('PlayScene');
@@ -148,13 +148,21 @@ export class PlayScene extends Phaser.Scene {
   private registerInput() {
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (this.inputLocked) return;
-      const tile = this.getTileFromPointer(pointer);
+      const cell = this.getCellFromWorld(pointer.worldX, pointer.worldY);
+      if (!cell) return;
+      const tile = this.getTileAt(cell.row, cell.col);
       if (!tile) return;
       this.activeType = tile.type;
       this.activePath = [tile];
       this.highlightTile(tile, true);
       this.redrawPath();
-      this.isPointerActive = true;
+      this.isSelecting = true;
+    });
+
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (this.inputLocked || !this.isSelecting) return;
+      const cell = this.getCellFromWorld(pointer.worldX, pointer.worldY);
+      this.tryExtendPath(cell);
     });
 
     const finishPath = () => {
@@ -164,7 +172,7 @@ export class PlayScene extends Phaser.Scene {
       } else {
         this.clearPath();
       }
-      this.isPointerActive = false;
+      this.isSelecting = false;
     };
 
     this.input.on('pointerup', finishPath);
@@ -172,14 +180,16 @@ export class PlayScene extends Phaser.Scene {
   }
 
   update() {
-    if (this.inputLocked || this.activeType === null || !this.isPointerActive) return;
+    if (this.inputLocked || this.activeType === null || !this.isSelecting) return;
     const pointer = this.input.activePointer;
     if (!pointer.isDown) return;
-    this.extendPathFromPointer(pointer);
+    const cell = this.getCellFromWorld(pointer.worldX, pointer.worldY);
+    this.tryExtendPath(cell);
   }
 
-  private extendPathFromPointer(pointer: Phaser.Input.Pointer) {
-    const tile = this.getTileFromPointer(pointer);
+  private tryExtendPath(cell: { row: number; col: number } | null) {
+    if (!cell) return;
+    const tile = this.getTileAt(cell.row, cell.col);
     if (!tile || tile.type !== this.activeType) return;
     const last = this.activePath[this.activePath.length - 1];
     if (!last) return;
@@ -220,7 +230,7 @@ export class PlayScene extends Phaser.Scene {
     }
     this.activePath = [];
     this.activeType = null;
-    this.isPointerActive = false;
+    this.isSelecting = false;
     this.redrawPath();
   }
 
@@ -348,14 +358,13 @@ export class PlayScene extends Phaser.Scene {
       .setOrigin(0.5);
   }
 
-  private getTileFromPointer(pointer: Phaser.Input.Pointer) {
-    return this.getTileFromWorld(pointer.worldX, pointer.worldY);
-  }
-
-  private getTileFromWorld(x: number, y: number) {
+  private getCellFromWorld(x: number, y: number) {
     const col = Math.floor((x - this.boardLeft) / this.tileSize);
     const row = Math.floor((y - this.boardTop) / this.tileSize);
-    return this.getTileAt(row, col);
+    if (row < 0 || row >= ROWS || col < 0 || col >= COLS) {
+      return null;
+    }
+    return { row, col };
   }
 
   private getTileAt(row: number, col: number) {
