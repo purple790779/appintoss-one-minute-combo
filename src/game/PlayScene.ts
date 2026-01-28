@@ -148,9 +148,8 @@ export class PlayScene extends Phaser.Scene {
   private registerInput() {
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (this.inputLocked) return;
-      const cell = this.getCellFromWorld(pointer.worldX, pointer.worldY);
-      if (!cell) return;
-      const tile = this.getTileAt(cell.row, cell.col);
+      const p = pointer.positionToCamera(this.cameras.main);
+      const tile = this.getTileAtWorld(p.x, p.y);
       if (!tile) return;
       this.activeType = tile.type;
       this.activePath = [tile];
@@ -161,8 +160,9 @@ export class PlayScene extends Phaser.Scene {
 
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       if (this.inputLocked || !this.isSelecting) return;
-      const cell = this.getCellFromWorld(pointer.worldX, pointer.worldY);
-      this.tryExtendPath(cell);
+      const p = pointer.positionToCamera(this.cameras.main);
+      const tile = this.getTileAtWorld(p.x, p.y);
+      this.tryExtendPath(tile);
     });
 
     const finishPath = () => {
@@ -183,13 +183,12 @@ export class PlayScene extends Phaser.Scene {
     if (this.inputLocked || this.activeType === null || !this.isSelecting) return;
     const pointer = this.input.activePointer;
     if (!pointer.isDown) return;
-    const cell = this.getCellFromWorld(pointer.worldX, pointer.worldY);
-    this.tryExtendPath(cell);
+    const p = pointer.positionToCamera(this.cameras.main);
+    const tile = this.getTileAtWorld(p.x, p.y);
+    this.tryExtendPath(tile);
   }
 
-  private tryExtendPath(cell: { row: number; col: number } | null) {
-    if (!cell) return;
-    const tile = this.getTileAt(cell.row, cell.col);
+  private tryExtendPath(tile: Tile | null) {
     if (!tile || tile.type !== this.activeType) return;
     const last = this.activePath[this.activePath.length - 1];
     if (!last) return;
@@ -358,20 +357,17 @@ export class PlayScene extends Phaser.Scene {
       .setOrigin(0.5);
   }
 
-  private getCellFromWorld(x: number, y: number) {
-    const col = Math.floor((x - this.boardLeft) / this.tileSize);
-    const row = Math.floor((y - this.boardTop) / this.tileSize);
-    if (row < 0 || row >= ROWS || col < 0 || col >= COLS) {
-      return null;
+  private getTileAtWorld(x: number, y: number) {
+    for (let row = 0; row < ROWS; row += 1) {
+      for (let col = 0; col < COLS; col += 1) {
+        const tile = this.board[row][col];
+        if (!tile) continue;
+        if (tile.sprite.getBounds().contains(x, y)) {
+          return tile;
+        }
+      }
     }
-    return { row, col };
-  }
-
-  private getTileAt(row: number, col: number) {
-    if (row < 0 || row >= ROWS || col < 0 || col >= COLS) {
-      return null;
-    }
-    return this.board[row][col];
+    return null;
   }
 
   private getTilePosition(row: number, col: number) {
