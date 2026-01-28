@@ -5,6 +5,7 @@ export type GameState = 'READY' | 'PLAYING' | 'ENDED';
 
 const DEFAULT_TIME_MS = 60_000;
 const BEST_SCORE_KEY = 'omc_highscore';
+const TUTORIAL_SEEN_KEY = 'omc_tutorial_seen';
 
 const bestScoreSchema = z.coerce.number().int().nonnegative().catch(0);
 
@@ -29,20 +30,34 @@ interface GameStore {
   score: number;
   bestScore: number;
   combo: number;
+  maxCombo: number;
   lastClearAtMs: number;
   soundEnabled: boolean;
   sessionId: number;
+  tutorialSeen: boolean;
   startGame: () => void;
   restartGame: () => void;
   endGame: () => void;
   setTimeLeftMs: (ms: number) => void;
   addScore: (amount?: number) => void;
   setCombo: (combo: number) => void;
+  setMaxCombo: (combo: number) => void;
   resetCombo: () => void;
   setLastClearAtMs: (ms: number) => void;
   toggleSound: () => void;
   setBestScore: (score: number) => void;
+  setTutorialSeen: () => void;
 }
+
+const loadTutorialSeen = () => {
+  if (typeof localStorage === 'undefined') return false;
+  return localStorage.getItem(TUTORIAL_SEEN_KEY) === '1';
+};
+
+const saveTutorialSeen = () => {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(TUTORIAL_SEEN_KEY, '1');
+};
 
 export const useGameStore = create<GameStore>((set, get) => ({
   gameState: 'READY',
@@ -50,15 +65,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
   score: 0,
   bestScore: loadBestScore(),
   combo: 0,
+  maxCombo: 0,
   lastClearAtMs: 0,
   soundEnabled: true,
   sessionId: 0,
+  tutorialSeen: loadTutorialSeen(),
   startGame: () =>
     set({
       gameState: 'PLAYING',
       timeLeftMs: DEFAULT_TIME_MS,
       score: 0,
       combo: 0,
+      maxCombo: 0,
       lastClearAtMs: 0,
       sessionId: get().sessionId + 1,
     }),
@@ -68,6 +86,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       timeLeftMs: DEFAULT_TIME_MS,
       score: 0,
       combo: 0,
+      maxCombo: 0,
       lastClearAtMs: 0,
       sessionId: get().sessionId + 1,
     }),
@@ -90,13 +109,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({ bestScore: nextScore });
     }
   },
-  setCombo: (combo) => set({ combo: Math.max(0, combo) }),
-  resetCombo: () => set({ combo: 0 }),
+  setCombo: (combo) =>
+    set((state) => {
+      const nextCombo = Math.max(0, combo);
+      return {
+        combo: nextCombo,
+        maxCombo: Math.max(state.maxCombo, nextCombo),
+      };
+    }),
+  setMaxCombo: (combo) => set({ maxCombo: Math.max(0, combo) }),
+  resetCombo: () => set({ combo: 0, maxCombo: 0 }),
   setLastClearAtMs: (ms) => set({ lastClearAtMs: Math.max(0, ms) }),
   toggleSound: () => set((state) => ({ soundEnabled: !state.soundEnabled })),
   setBestScore: (score) => {
     saveBestScore(score);
     set({ bestScore: score });
+  },
+  setTutorialSeen: () => {
+    saveTutorialSeen();
+    set({ tutorialSeen: true });
   },
 }));
 

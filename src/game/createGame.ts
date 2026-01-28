@@ -14,7 +14,7 @@ export const createGame = (parent: string | HTMLElement) => {
       autoCenter: Phaser.Scale.CENTER_BOTH,
     },
     input: {
-      activePointers: 1,
+      activePointers: 2,
       touch: {
         capture: true,
       },

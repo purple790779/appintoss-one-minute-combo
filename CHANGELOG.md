@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.0.0
+- feat: 매치-3 퍼즐 게임으로 완전히 재구현
+- feat: 구슬 드래그로 인접 구슬과 위치 교환
+- feat: 같은 색 3개 이상 나열 시 자동 제거
+- feat: 3D 구슬 느낌 (하이라이트 효과)
+- feat: 색상 대비 강화 (6가지 명확한 색상)
+- feat: 첫 진입 튜토리얼 (1회만 표시)
+- feat: 3-2-1-GO! 카운트다운
+- feat: 게임 중 종료 확인 모달
+- feat: 콤보 애니메이션 효과
+- feat: 시작 시 3개 연속 방지 로직
+- fix: DOM 포인터 이벤트 기반 입력으로 안정화
+- fix: 앱 전환/화면 꺼짐 시 상태 자동 정리
+- ui: 선택/제거 애니메이션 개선
+- ui: 도움말 매치-3 규칙 반영
+
 ## v0.4.4
 - fix: mobile (Samsung Internet/Chrome) drag input on scaled boards now uses board-local coordinates.
 - fix: resolve TypeScript build error in pointer world coordinate handling.

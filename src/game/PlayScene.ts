@@ -4,9 +4,10 @@ import { type GameState, useGameStore } from '../store/gameStore';
 const COLS = 6;
 const ROWS = 8;
 const TYPES = 6;
-const DRAG_MATCH_MIN = 3;
 const COMBO_WINDOW_MS = 1200;
-const DROP_DURATION_MS = 160;
+const DROP_DURATION_MS = 180;
+const SWAP_DURATION_MS = 200;
+const REMOVE_DURATION_MS = 150;
 const SHOW_TILE_LABELS =
   typeof window !== 'undefined' &&
   new URLSearchParams(window.location.search).get('debugLabels') === '1';
@@ -15,12 +16,12 @@ const DEBUG_INPUT_OVERLAY =
   new URLSearchParams(window.location.search).get('debugInput') === '1';
 
 const TILE_COLORS = [
-  0x38bdf8,
-  0x60a5fa,
-  0xf472b6,
-  0xfbbf24,
-  0x34d399,
-  0xa78bfa,
+  0xff4081, // 진한 핑크
+  0xffeb3b, // 노란색
+  0x4caf50, // 녹색
+  0x2196f3, // 파란색
+  0x9c27b0, // 보라색
+  0xff5722, // 주황색
 ];
 
 type TileSprite = Phaser.GameObjects.Arc;
@@ -32,6 +33,7 @@ interface Tile {
   type: number;
   sprite: TileSprite;
   label: TileLabel | null;
+  highlight?: Phaser.GameObjects.Arc;
 }
 
 export class PlayScene extends Phaser.Scene {
@@ -41,21 +43,12 @@ export class PlayScene extends Phaser.Scene {
   private tileRadius = 18;
   private boardLeft = 0;
   private boardTop = 0;
-  private activePath: Tile[] = [];
-  private activeType: number | null = null;
-  private lineGraphics?: Phaser.GameObjects.Graphics;
   private inputLocked = true;
   private unsubscribe?: () => void;
-  private isSelecting = false;
-  private dragPointerId: number | null = null;
-  private ignoreMouseWhileTouch = false;
   private debugText?: Phaser.GameObjects.Text;
-  private downCount = 0;
-  private moveCount = 0;
-  private upCount = 0;
-  private lastReason = '';
-  private lastHitTile: Tile | null = null;
-  private tmpV = new Phaser.Math.Vector2();
+  private downHandler?: (e: PointerEvent) => void;
+  private moveHandler?: (e: PointerEvent) => void;
+  private upHandler?: (e: PointerEvent) => void;
 
   constructor() {
     super('PlayScene');
@@ -64,6 +57,7 @@ export class PlayScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor('#0f172a');
     this.boardRoot = this.add.container(0, 0);
+    
     if (DEBUG_INPUT_OVERLAY) {
       this.debugText = this.add
         .text(12, 12, '', {
@@ -79,10 +73,7 @@ export class PlayScene extends Phaser.Scene {
     }
 
     this.createBoard();
-    this.lineGraphics = this.add.graphics({ lineStyle: { width: 6, color: 0xffffff } });
-    this.boardRoot.add(this.lineGraphics);
-    this.layoutBoard();
-    this.registerInput();
+    this.setupDomInput();
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.shutdown());
     this.scale.on('resize', () => this.layoutBoard());
@@ -102,47 +93,50 @@ export class PlayScene extends Phaser.Scene {
   shutdown() {
     this.unsubscribe?.();
     this.unsubscribe = undefined;
+    this.cleanupDomInput();
   }
 
   private applyGameState(gameState: GameState) {
     if (gameState === 'PLAYING') {
       this.inputLocked = false;
-      this.clearPath();
       return;
     }
     this.inputLocked = true;
-    this.clearPath();
   }
 
   private createBoard() {
     this.board = Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => null));
     for (let row = 0; row < ROWS; row += 1) {
       for (let col = 0; col < COLS; col += 1) {
-        const type = Phaser.Math.Between(0, TYPES - 1);
+        const type = this.pickNonMatchingType(row, col);
         const position = this.getTilePosition(row, col);
         const sprite = this.add.circle(position.x, position.y, this.tileRadius, TILE_COLORS[type]);
-        sprite.setStrokeStyle(2, 0x0f172a);
+        sprite.setStrokeStyle(2, 0x1e293b, 0.3);
+        
+        // 구슬 하이라이트 (3D 느낌)
+        const highlightRadius = this.tileRadius * 0.35;
+        const highlightX = position.x - this.tileRadius * 0.25;
+        const highlightY = position.y - this.tileRadius * 0.25;
+        const highlight = this.add.circle(highlightX, highlightY, highlightRadius, 0xffffff, 0.4);
+        
         const label = this.createTileLabel(position.x, position.y, type);
-        this.boardRoot?.add([sprite, label].filter(Boolean) as Phaser.GameObjects.GameObject[]);
-        this.board[row][col] = { row, col, type, sprite, label };
+        this.boardRoot?.add([sprite, highlight, label].filter(Boolean) as Phaser.GameObjects.GameObject[]);
+        this.board[row][col] = { row, col, type, sprite, label, highlight };
       }
     }
+    this.layoutBoard();
   }
 
   private resetBoard() {
-    this.clearPath();
     for (const row of this.board) {
       for (const tile of row) {
         if (!tile) continue;
         tile.sprite.destroy();
+        tile.highlight?.destroy();
         tile.label?.destroy();
       }
     }
     this.createBoard();
-    if (this.lineGraphics && this.boardRoot) {
-      this.boardRoot.add(this.lineGraphics);
-    }
-    this.layoutBoard();
   }
 
   private layoutBoard() {
@@ -166,7 +160,16 @@ export class PlayScene extends Phaser.Scene {
         const pos = this.getTilePosition(row, col);
         tile.sprite.setPosition(pos.x, pos.y);
         tile.sprite.setRadius(this.tileRadius);
-        tile.sprite.setStrokeStyle(2, 0x0f172a);
+        tile.sprite.setStrokeStyle(2, 0x1e293b, 0.3);
+        
+        if (tile.highlight) {
+          const highlightRadius = this.tileRadius * 0.35;
+          const highlightX = pos.x - this.tileRadius * 0.25;
+          const highlightY = pos.y - this.tileRadius * 0.25;
+          tile.highlight.setPosition(highlightX, highlightY);
+          tile.highlight.setRadius(highlightRadius);
+        }
+        
         if (tile.label) {
           tile.label
             .setPosition(pos.x, pos.y)
@@ -174,204 +177,246 @@ export class PlayScene extends Phaser.Scene {
         }
       }
     }
-    this.redrawPath();
   }
 
-  private registerInput() {
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      this.downCount += 1;
+  private setupDomInput() {
+    const canvas = this.game.canvas;
+    if (!canvas) return;
+
+    canvas.style.touchAction = 'none';
+
+    let dragStartTile: Tile | null = null;
+
+    this.downHandler = (e: PointerEvent) => {
       if (this.inputLocked) return;
-      if (this.ignoreMouseWhileTouch && this.isMousePointer(pointer)) return;
-      if (this.dragPointerId !== null) return;
-      if (this.isTouchPointer(pointer)) {
-        this.ignoreMouseWhileTouch = true;
-      }
-      const p = this.getPointerWorld(pointer);
-      const tile = this.resolveTileAtWorld(p.x, p.y);
-      if (!tile) {
-        return;
-      }
-      this.dragPointerId = pointer.id;
-      this.activeType = tile.type;
-      this.activePath = [tile];
+      const tile = this.getTileAtClient(e.clientX, e.clientY);
+      if (!tile) return;
+      dragStartTile = tile;
       this.highlightTile(tile, true);
-      this.redrawPath();
-      this.isSelecting = true;
-      this.lastReason = '';
-      this.lastHitTile = tile;
-    });
-
-    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      this.moveCount += 1;
-      if (this.inputLocked || !this.isSelecting) return;
-      if (this.ignoreMouseWhileTouch && this.isMousePointer(pointer)) return;
-      if (this.dragPointerId !== pointer.id) return;
-      const p = this.getPointerWorld(pointer);
-      const tile = this.resolveTileAtWorld(p.x, p.y);
-      this.lastHitTile = tile;
-      this.tryExtendPath(tile);
-    });
-
-    const finishPath = (pointer: Phaser.Input.Pointer) => {
-      if (this.inputLocked) return;
-      if (this.ignoreMouseWhileTouch && this.isMousePointer(pointer)) return;
-      if (this.dragPointerId !== pointer.id) return;
-      if (this.activePath.length >= DRAG_MATCH_MIN) {
-        void this.resolveMatch(this.activePath);
-      } else {
-        this.clearPath();
-      }
-      this.isSelecting = false;
-      this.dragPointerId = null;
-      this.ignoreMouseWhileTouch = false;
+      console.log('👆 선택:', { col: tile.col, row: tile.row, type: tile.type });
+      e.preventDefault();
     };
 
-    this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-      this.upCount += 1;
-      finishPath(pointer);
-    });
-    this.input.on('pointerupoutside', (pointer: Phaser.Input.Pointer) => {
-      this.upCount += 1;
-      finishPath(pointer);
-    });
-    this.input.on('pointercancel', (pointer: Phaser.Input.Pointer) => {
-      this.upCount += 1;
-      finishPath(pointer);
-    });
+    this.moveHandler = (e: PointerEvent) => {
+      if (this.inputLocked || !dragStartTile) return;
+      const tile = this.getTileAtClient(e.clientX, e.clientY);
+      if (!tile || tile === dragStartTile) return;
+      
+      const isAdjacent = Math.abs(tile.row - dragStartTile.row) + Math.abs(tile.col - dragStartTile.col) === 1;
+      if (!isAdjacent) return;
+
+      console.log('🔄 스왑:', { from: `(${dragStartTile.col},${dragStartTile.row})`, to: `(${tile.col},${tile.row})` });
+      this.highlightTile(dragStartTile, false);
+      void this.handleSwap(dragStartTile, tile);
+      dragStartTile = null;
+      e.preventDefault();
+    };
+
+    const cancelDrag = () => {
+      if (dragStartTile) {
+        this.highlightTile(dragStartTile, false);
+        dragStartTile = null;
+      }
+    };
+
+    this.upHandler = (e: PointerEvent) => {
+      cancelDrag();
+      e.preventDefault();
+    };
+
+    // 이벤트 충돌 방지 핸들러
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        cancelDrag();
+      }
+    };
+
+    const handleBlur = () => {
+      cancelDrag();
+    };
+
+    canvas.addEventListener('pointerdown', this.downHandler, { passive: false });
+    canvas.addEventListener('pointermove', this.moveHandler, { passive: false });
+    canvas.addEventListener('pointerup', this.upHandler, { passive: false });
+    canvas.addEventListener('pointercancel', this.upHandler, { passive: false });
+    canvas.addEventListener('pointerleave', this.upHandler, { passive: false });
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+
+    // cleanup을 위해 저장
+    (canvas as any)._visibilityHandler = handleVisibilityChange;
+    (canvas as any)._blurHandler = handleBlur;
+  }
+
+  private cleanupDomInput() {
+    const canvas = this.game.canvas;
+    if (!canvas) return;
+    if (this.downHandler) canvas.removeEventListener('pointerdown', this.downHandler);
+    if (this.moveHandler) canvas.removeEventListener('pointermove', this.moveHandler);
+    if (this.upHandler) {
+      canvas.removeEventListener('pointerup', this.upHandler);
+      canvas.removeEventListener('pointercancel', this.upHandler);
+      canvas.removeEventListener('pointerleave', this.upHandler);
+    }
+    const visibilityHandler = (canvas as any)._visibilityHandler;
+    const blurHandler = (canvas as any)._blurHandler;
+    if (visibilityHandler) {
+      document.removeEventListener('visibilitychange', visibilityHandler);
+    }
+    if (blurHandler) {
+      window.removeEventListener('blur', blurHandler);
+    }
   }
 
   update() {
-    if (this.inputLocked || !this.isSelecting) {
-      this.updateDebugOverlay();
-      return;
+    if (DEBUG_INPUT_OVERLAY && this.debugText) {
+      const store = useGameStore.getState();
+      this.debugText.setText([
+        `state: ${store.gameState}  locked: ${this.inputLocked}`,
+        `score: ${store.score}  combo: ${store.combo}`,
+      ]);
     }
-    const pointer = this.input.activePointer;
-    if (this.ignoreMouseWhileTouch && this.isMousePointer(pointer)) {
-      this.updateDebugOverlay();
-      return;
-    }
-    if (this.dragPointerId !== pointer.id) {
-      this.updateDebugOverlay();
-      return;
-    }
-    const p = this.getPointerWorld(pointer);
-    const tile = this.resolveTileAtWorld(p.x, p.y);
-    this.lastHitTile = tile;
-    if (pointer.isDown) {
-      this.tryExtendPath(tile);
-    }
-    this.updateDebugOverlay(pointer, p.x, p.y, tile);
   }
 
-  private tryExtendPath(tile: Tile | null) {
-    if (!tile) {
-      if (!this.lastReason) {
-        this.lastReason = 'no-hit';
+  private async handleSwap(tile1: Tile, tile2: Tile) {
+    this.inputLocked = true;
+
+    // 보드 데이터 스왑
+    this.board[tile1.row][tile1.col] = tile2;
+    this.board[tile2.row][tile2.col] = tile1;
+    const tempRow = tile1.row;
+    const tempCol = tile1.col;
+    tile1.row = tile2.row;
+    tile1.col = tile2.col;
+    tile2.row = tempRow;
+    tile2.col = tempCol;
+
+    // 스왑 애니메이션
+    await this.swapAnimation(tile1, tile2);
+
+    // 매치 체크 및 처리
+    await this.checkAndResolveMatches();
+
+    this.inputLocked = useGameStore.getState().gameState !== 'PLAYING';
+  }
+
+  private swapAnimation(tile1: Tile, tile2: Tile) {
+    const pos1 = this.getTilePosition(tile1.row, tile1.col);
+    const pos2 = this.getTilePosition(tile2.row, tile2.col);
+    
+    return Promise.all([
+      this.tweenTile(tile1, pos1.x, pos1.y, SWAP_DURATION_MS),
+      this.tweenTile(tile2, pos2.x, pos2.y, SWAP_DURATION_MS),
+    ]);
+  }
+
+  private async checkAndResolveMatches() {
+    let hasMatches = true;
+    while (hasMatches) {
+      const matches = this.findMatches();
+      if (matches.length === 0) {
+        hasMatches = false;
+        break;
       }
-      return;
+
+      console.log('💥 매치:', matches.length, '개');
+      
+      const now = this.time.now;
+      const store = useGameStore.getState();
+      const lastClearAtMs = store.lastClearAtMs;
+      const nextCombo =
+        lastClearAtMs > 0 && now - lastClearAtMs <= COMBO_WINDOW_MS
+          ? store.combo + 1
+          : 0;
+      store.setCombo(nextCombo);
+      store.setLastClearAtMs(now);
+
+      const baseScore = matches.length * matches.length * 10;
+      const scoreMultiplier = 1 + nextCombo * 0.15;
+      const finalScore = Math.round(baseScore * scoreMultiplier);
+      useGameStore.getState().addScore(finalScore);
+
+      await this.removeTiles(matches);
+      await this.collapseBoard();
     }
-    if (this.activeType === null) {
-      this.lastReason = 'no-active';
-      return;
+  }
+
+  private findMatches(): Tile[] {
+    const matched = new Set<Tile>();
+
+    // 가로 매치 체크
+    for (let row = 0; row < ROWS; row += 1) {
+      for (let col = 0; col < COLS - 2; col += 1) {
+        const tile1 = this.board[row][col];
+        const tile2 = this.board[row][col + 1];
+        const tile3 = this.board[row][col + 2];
+        if (tile1 && tile2 && tile3 && tile1.type === tile2.type && tile2.type === tile3.type) {
+          matched.add(tile1);
+          matched.add(tile2);
+          matched.add(tile3);
+        }
+      }
     }
-    if (tile.type !== this.activeType) {
-      this.lastReason = 'type-mismatch';
-      return;
+
+    // 세로 매치 체크
+    for (let col = 0; col < COLS; col += 1) {
+      for (let row = 0; row < ROWS - 2; row += 1) {
+        const tile1 = this.board[row][col];
+        const tile2 = this.board[row + 1][col];
+        const tile3 = this.board[row + 2][col];
+        if (tile1 && tile2 && tile3 && tile1.type === tile2.type && tile2.type === tile3.type) {
+          matched.add(tile1);
+          matched.add(tile2);
+          matched.add(tile3);
+        }
+      }
     }
-    const last = this.activePath[this.activePath.length - 1];
-    if (!last) {
-      this.lastReason = 'no-last';
-      return;
+
+    return Array.from(matched);
+  }
+
+  private getTileAtClient(clientX: number, clientY: number): Tile | null {
+    const bounds = this.scale.canvasBounds;
+    if (!bounds || bounds.width === 0) return null;
+
+    const gameX = (clientX - bounds.left) * (this.scale.width / bounds.width);
+    const gameY = (clientY - bounds.top) * (this.scale.height / bounds.height);
+
+    const localX = gameX - this.boardLeft;
+    const localY = gameY - this.boardTop;
+
+    if (
+      localX < 0 ||
+      localX >= this.tileSize * COLS ||
+      localY < 0 ||
+      localY >= this.tileSize * ROWS
+    ) {
+      return null;
     }
-    const isAdjacent = Math.abs(tile.row - last.row) + Math.abs(tile.col - last.col) === 1;
-    if (!isAdjacent) {
-      this.lastReason = 'not-adjacent';
-      return;
-    }
-    const existingIndex = this.activePath.indexOf(tile);
-    if (existingIndex === this.activePath.length - 2) {
-      const removed = this.activePath.pop();
-      if (removed) this.highlightTile(removed, false);
-      this.redrawPath();
-      this.lastReason = 'backtrack';
-      return;
-    }
-    if (existingIndex !== -1) {
-      this.lastReason = 'revisit';
-      return;
-    }
-    this.activePath.push(tile);
-    this.highlightTile(tile, true);
-    this.redrawPath();
-    this.lastReason = '';
+
+    const col = Math.floor(localX / this.tileSize);
+    const row = Math.floor(localY / this.tileSize);
+    return this.board[row]?.[col] ?? null;
   }
 
   private highlightTile(tile: Tile, isActive: boolean) {
     if (isActive) {
-      tile.sprite.setScale(1.08);
-      tile.sprite.setStrokeStyle(4, 0xffffff);
-      if (tile.label) {
-        tile.label.setScale(1.08);
-      }
+      this.tweens.add({
+        targets: [tile.sprite, tile.highlight, tile.label].filter(Boolean),
+        scale: 1.15,
+        duration: 100,
+        ease: 'Back.out',
+      });
+      tile.sprite.setStrokeStyle(5, 0xffffff, 1);
     } else {
-      tile.sprite.setScale(1);
-      tile.sprite.setStrokeStyle(2, 0x0f172a);
-      if (tile.label) {
-        tile.label.setScale(1);
-      }
+      this.tweens.add({
+        targets: [tile.sprite, tile.highlight, tile.label].filter(Boolean),
+        scale: 1,
+        duration: 100,
+        ease: 'Quad.out',
+      });
+      tile.sprite.setStrokeStyle(2, 0x1e293b, 0.3);
     }
-  }
-
-  private clearPath() {
-    for (const tile of this.activePath) {
-      this.highlightTile(tile, false);
-    }
-    this.activePath = [];
-    this.activeType = null;
-    this.isSelecting = false;
-    this.dragPointerId = null;
-    this.ignoreMouseWhileTouch = false;
-    this.redrawPath();
-  }
-
-  private redrawPath() {
-    if (!this.lineGraphics) return;
-    this.lineGraphics.clear();
-    if (this.activePath.length < 2) return;
-    this.lineGraphics.lineStyle(6, 0xffffff, 0.7);
-    this.lineGraphics.beginPath();
-    const first = this.activePath[0];
-    this.lineGraphics.moveTo(first.sprite.x, first.sprite.y);
-    for (let i = 1; i < this.activePath.length; i += 1) {
-      const tile = this.activePath[i];
-      this.lineGraphics.lineTo(tile.sprite.x, tile.sprite.y);
-    }
-    this.lineGraphics.strokePath();
-  }
-
-  private async resolveMatch(path: Tile[]) {
-    this.inputLocked = true;
-    const tiles = [...path];
-    this.clearPath();
-
-    const now = this.time.now;
-    const store = useGameStore.getState();
-    const lastClearAtMs = store.lastClearAtMs;
-    const nextCombo =
-      lastClearAtMs > 0 && now - lastClearAtMs <= COMBO_WINDOW_MS
-        ? store.combo + 1
-        : 0;
-    store.setCombo(nextCombo);
-    store.setLastClearAtMs(now);
-
-    const baseScore = tiles.length * tiles.length * 10;
-    const scoreMultiplier = 1 + nextCombo * 0.15;
-    const finalScore = Math.round(baseScore * scoreMultiplier);
-    useGameStore.getState().addScore(finalScore);
-
-    await this.removeTiles(tiles);
-    await this.collapseBoard();
-    this.inputLocked = useGameStore.getState().gameState !== 'PLAYING';
   }
 
   private removeTiles(tiles: Tile[]) {
@@ -380,15 +425,18 @@ export class PlayScene extends Phaser.Scene {
       const total = tiles.length;
       for (const tile of tiles) {
         this.board[tile.row][tile.col] = null;
-        const targets = tile.label ? [tile.sprite, tile.label] : [tile.sprite];
+        const targets = [tile.sprite, tile.highlight, tile.label].filter(Boolean) as Phaser.GameObjects.GameObject[];
+        
+        // 펑! 하는 느낌의 제거 애니메이션
         this.tweens.add({
           targets,
-          scale: 0,
-          alpha: 0,
-          duration: 120,
+          scale: { from: 1, to: 1.3 },
+          alpha: { from: 1, to: 0 },
+          duration: REMOVE_DURATION_MS,
           ease: 'Back.in',
           onComplete: () => {
             tile.sprite.destroy();
+            tile.highlight?.destroy();
             tile.label?.destroy();
             completed += 1;
             if (completed >= total) {
@@ -412,38 +460,70 @@ export class PlayScene extends Phaser.Scene {
           this.board[row][col] = null;
           tile.row = writeRow;
           const target = this.getTilePosition(writeRow, col);
-          tweens.push(this.tweenTile(tile, target.x, target.y));
+          tweens.push(this.tweenTile(tile, target.x, target.y, DROP_DURATION_MS));
         }
         writeRow -= 1;
       }
       const missing = writeRow + 1;
       for (let i = 0; i < missing; i += 1) {
         const row = i;
-        const type = Phaser.Math.Between(0, TYPES - 1);
+        const type = this.pickNonMatchingType(row, col);
         const startPos = this.getTilePosition(-1 - i, col);
         const targetPos = this.getTilePosition(row, col);
         const sprite = this.add.circle(startPos.x, startPos.y, this.tileRadius, TILE_COLORS[type]);
-        sprite.setStrokeStyle(2, 0x0f172a);
+        sprite.setStrokeStyle(2, 0x1e293b, 0.3);
+        
+        // 구슬 하이라이트
+        const highlightRadius = this.tileRadius * 0.35;
+        const highlightX = startPos.x - this.tileRadius * 0.25;
+        const highlightY = startPos.y - this.tileRadius * 0.25;
+        const highlight = this.add.circle(highlightX, highlightY, highlightRadius, 0xffffff, 0.4);
+        
         const label = this.createTileLabel(startPos.x, startPos.y, type);
-        const tile: Tile = { row, col, type, sprite, label };
+        const tile: Tile = { row, col, type, sprite, label, highlight };
+        this.boardRoot?.add([sprite, highlight, label].filter(Boolean) as Phaser.GameObjects.GameObject[]);
         this.board[row][col] = tile;
-        tweens.push(this.tweenTile(tile, targetPos.x, targetPos.y));
+        tweens.push(this.tweenTile(tile, targetPos.x, targetPos.y, DROP_DURATION_MS));
       }
     }
     await Promise.all(tweens);
   }
 
-  private tweenTile(tile: Tile, x: number, y: number) {
+  private tweenTile(tile: Tile, x: number, y: number, duration: number) {
     return new Promise<void>((resolve) => {
-      const targets = tile.label ? [tile.sprite, tile.label] : [tile.sprite];
+      // 구슬 본체 이동
       this.tweens.add({
-        targets,
+        targets: tile.sprite,
         x,
         y,
-        duration: DROP_DURATION_MS,
+        duration,
         ease: 'Quad.out',
         onComplete: () => resolve(),
       });
+      
+      // 하이라이트 이동
+      if (tile.highlight) {
+        const highlightX = x - this.tileRadius * 0.25;
+        const highlightY = y - this.tileRadius * 0.25;
+        this.tweens.add({
+          targets: tile.highlight,
+          x: highlightX,
+          y: highlightY,
+          duration,
+          ease: 'Quad.out',
+        });
+      }
+      
+      // 라벨 이동
+      if (tile.label) {
+        this.tweens.add({
+          targets: tile.label,
+          x,
+          y,
+          duration,
+          ease: 'Quad.out',
+        });
+      }
     });
   }
 
@@ -458,62 +538,6 @@ export class PlayScene extends Phaser.Scene {
       .setOrigin(0.5);
   }
 
-  private resolveTileAtWorld(x: number, y: number) {
-    const local = this.worldToBoardLocal(x, y);
-    if (
-      local.x < 0 ||
-      local.x >= this.tileSize * COLS ||
-      local.y < 0 ||
-      local.y >= this.tileSize * ROWS
-    ) {
-      this.lastReason = 'out-of-board';
-      return null;
-    }
-    const col = Math.floor(local.x / this.tileSize);
-    const row = Math.floor(local.y / this.tileSize);
-    const tile = this.board[row]?.[col] ?? null;
-    this.lastReason = tile ? '' : 'no-hit';
-    return tile;
-  }
-
-  private updateDebugOverlay(
-    pointer?: Phaser.Input.Pointer,
-    worldX?: number,
-    worldY?: number,
-    hitTile?: Tile | null,
-  ) {
-    if (!this.debugText) return;
-    const activePointer = pointer ?? this.input.activePointer;
-    const p = this.getPointerWorld(activePointer);
-    const screenX = Math.round(activePointer.x);
-    const screenY = Math.round(activePointer.y);
-    const wx = Math.round(worldX ?? p.x);
-    const wy = Math.round(worldY ?? p.y);
-    const hit = hitTile ?? this.lastHitTile;
-    const hitLabel = hit ? `(${hit.col},${hit.row},${hit.type})` : 'null';
-    this.debugText.setText([
-      `down/move/up: ${this.downCount}/${this.moveCount}/${this.upCount}`,
-      `isSelecting: ${this.isSelecting ? 'true' : 'false'}  pathLen: ${this.activePath.length}`,
-      `pointer: ${screenX},${screenY}  world: ${wx},${wy}`,
-      `hit tile: ${hitLabel}`,
-      `lastReason: ${this.lastReason || '-'}`,
-    ]);
-  }
-
-  private getPointerWorld(pointer: Phaser.Input.Pointer) {
-    return { x: pointer.worldX, y: pointer.worldY };
-  }
-
-  private isMousePointer(pointer: Phaser.Input.Pointer) {
-    const pointerType = (pointer.event as PointerEvent | undefined)?.pointerType;
-    return pointerType === 'mouse' || !pointer.wasTouch;
-  }
-
-  private isTouchPointer(pointer: Phaser.Input.Pointer) {
-    const pointerType = (pointer.event as PointerEvent | undefined)?.pointerType;
-    return pointer.wasTouch || (pointerType !== undefined && pointerType !== 'mouse');
-  }
-
   private getTilePosition(row: number, col: number) {
     return {
       x: col * this.tileSize + this.tileSize / 2,
@@ -521,13 +545,31 @@ export class PlayScene extends Phaser.Scene {
     };
   }
 
-  private worldToBoardLocal(worldX: number, worldY: number) {
-    if (!this.boardRoot) {
-      this.tmpV.set(worldX, worldY);
-      return this.tmpV;
+  private pickNonMatchingType(row: number, col: number) {
+    const forbidden = new Set<number>();
+    if (col >= 2) {
+      const left = this.board[row]?.[col - 1];
+      const left2 = this.board[row]?.[col - 2];
+      if (left && left2 && left.type === left2.type) {
+        forbidden.add(left.type);
+      }
     }
-    const matrix = this.boardRoot.getWorldTransformMatrix();
-    matrix.applyInverse(worldX, worldY, this.tmpV);
-    return this.tmpV;
+    if (row >= 2) {
+      const up = this.board[row - 1]?.[col];
+      const up2 = this.board[row - 2]?.[col];
+      if (up && up2 && up.type === up2.type) {
+        forbidden.add(up.type);
+      }
+    }
+    const candidates = [];
+    for (let type = 0; type < TYPES; type += 1) {
+      if (!forbidden.has(type)) {
+        candidates.push(type);
+      }
+    }
+    if (candidates.length === 0) {
+      return Phaser.Math.Between(0, TYPES - 1);
+    }
+    return candidates[Phaser.Math.Between(0, candidates.length - 1)];
   }
 }

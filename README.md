@@ -1,6 +1,14 @@
 # One Minute Combo
 
-Vite + React + TypeScript bootstrap for the One Minute Combo prototype.
+토스 앱인토스용 매치-3 퍼즐 게임 - 60초 안에 최고 점수를 달성하세요!
+
+## 게임 소개
+
+구슬을 움직여 같은 색 3개를 만들어 제거하는 매치-3 퍼즐 게임입니다.
+- 🎮 직관적인 드래그 조작
+- ⏱️ 60초 제한 시간
+- 🔥 콤보 시스템
+- 📱 모바일 최적화
 
 ## Version
 
