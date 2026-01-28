@@ -6,6 +6,7 @@
 - debug: input overlay diagnostics via ?debugInput=1.
 - fix: prevent overlays from swallowing drag; ensure touch capture.
 - fix: mobile drag-chain input fix (positionToCamera + bounds hit-test + polling).
+- fix: mobile drag fix (pointer id lock + ignore synthetic mouse).
 
 ## v0.4.3
 - mobile: fixed bottom START bar (never hidden).
