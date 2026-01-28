@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.5
+- debug: input overlay diagnostics via ?debugInput=1.
+- fix: prevent overlays from swallowing drag; ensure touch capture.
+
 ## v0.4.4
 - fix: mobile drag-chain input fix (positionToCamera + bounds hit-test + polling).
 

@@ -10,6 +10,9 @@ const DROP_DURATION_MS = 160;
 const SHOW_TILE_LABELS =
   typeof window !== 'undefined' &&
   new URLSearchParams(window.location.search).get('debugLabels') === '1';
+const DEBUG_INPUT_OVERLAY =
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('debugInput') === '1';
 
 const TILE_COLORS = [
   0x38bdf8,
@@ -43,6 +46,12 @@ export class PlayScene extends Phaser.Scene {
   private inputLocked = true;
   private unsubscribe?: () => void;
   private isSelecting = false;
+  private debugText?: Phaser.GameObjects.Text;
+  private downCount = 0;
+  private moveCount = 0;
+  private upCount = 0;
+  private lastReason = '';
+  private lastHitTile: Tile | null = null;
 
   constructor() {
     super('PlayScene');
@@ -52,6 +61,19 @@ export class PlayScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#0f172a');
     this.lineGraphics = this.add.graphics({ lineStyle: { width: 6, color: 0xffffff } });
     this.lineGraphics.setDepth(10);
+    if (DEBUG_INPUT_OVERLAY) {
+      this.debugText = this.add
+        .text(12, 12, '', {
+          fontFamily: 'system-ui, sans-serif',
+          fontSize: '12px',
+          color: '#e2e8f0',
+          backgroundColor: 'rgba(15, 23, 42, 0.7)',
+          padding: { x: 8, y: 6 },
+        })
+        .setOrigin(0)
+        .setDepth(20)
+        .setScrollFactor(0);
+    }
 
     this.createBoard();
     this.layoutBoard();
@@ -147,21 +169,28 @@ export class PlayScene extends Phaser.Scene {
 
   private registerInput() {
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      this.downCount += 1;
       if (this.inputLocked) return;
       const p = pointer.positionToCamera(this.cameras.main);
-      const tile = this.getTileAtWorld(p.x, p.y);
-      if (!tile) return;
+      const tile = this.resolveTileAtWorld(p.x, p.y);
+      if (!tile) {
+        return;
+      }
       this.activeType = tile.type;
       this.activePath = [tile];
       this.highlightTile(tile, true);
       this.redrawPath();
       this.isSelecting = true;
+      this.lastReason = '';
+      this.lastHitTile = tile;
     });
 
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      this.moveCount += 1;
       if (this.inputLocked || !this.isSelecting) return;
       const p = pointer.positionToCamera(this.cameras.main);
-      const tile = this.getTileAtWorld(p.x, p.y);
+      const tile = this.resolveTileAtWorld(p.x, p.y);
+      this.lastHitTile = tile;
       this.tryExtendPath(tile);
     });
 
@@ -175,36 +204,72 @@ export class PlayScene extends Phaser.Scene {
       this.isSelecting = false;
     };
 
-    this.input.on('pointerup', finishPath);
-    this.input.on('pointerupoutside', finishPath);
+    this.input.on('pointerup', () => {
+      this.upCount += 1;
+      finishPath();
+    });
+    this.input.on('pointerupoutside', () => {
+      this.upCount += 1;
+      finishPath();
+    });
   }
 
   update() {
-    if (this.inputLocked || this.activeType === null || !this.isSelecting) return;
+    if (this.inputLocked || !this.isSelecting) {
+      this.updateDebugOverlay();
+      return;
+    }
     const pointer = this.input.activePointer;
-    if (!pointer.isDown) return;
     const p = pointer.positionToCamera(this.cameras.main);
-    const tile = this.getTileAtWorld(p.x, p.y);
-    this.tryExtendPath(tile);
+    const tile = this.resolveTileAtWorld(p.x, p.y);
+    this.lastHitTile = tile;
+    if (pointer.isDown) {
+      this.tryExtendPath(tile);
+    }
+    this.updateDebugOverlay(pointer, p.x, p.y, tile);
   }
 
   private tryExtendPath(tile: Tile | null) {
-    if (!tile || tile.type !== this.activeType) return;
+    if (!tile) {
+      if (!this.lastReason) {
+        this.lastReason = 'no-hit';
+      }
+      return;
+    }
+    if (this.activeType === null) {
+      this.lastReason = 'no-active';
+      return;
+    }
+    if (tile.type !== this.activeType) {
+      this.lastReason = 'type-mismatch';
+      return;
+    }
     const last = this.activePath[this.activePath.length - 1];
-    if (!last) return;
+    if (!last) {
+      this.lastReason = 'no-last';
+      return;
+    }
     const isAdjacent = Math.abs(tile.row - last.row) + Math.abs(tile.col - last.col) === 1;
-    if (!isAdjacent) return;
+    if (!isAdjacent) {
+      this.lastReason = 'not-adjacent';
+      return;
+    }
     const existingIndex = this.activePath.indexOf(tile);
     if (existingIndex === this.activePath.length - 2) {
       const removed = this.activePath.pop();
       if (removed) this.highlightTile(removed, false);
       this.redrawPath();
+      this.lastReason = 'backtrack';
       return;
     }
-    if (existingIndex !== -1) return;
+    if (existingIndex !== -1) {
+      this.lastReason = 'revisit';
+      return;
+    }
     this.activePath.push(tile);
     this.highlightTile(tile, true);
     this.redrawPath();
+    this.lastReason = '';
   }
 
   private highlightTile(tile: Tile, isActive: boolean) {
@@ -357,17 +422,52 @@ export class PlayScene extends Phaser.Scene {
       .setOrigin(0.5);
   }
 
-  private getTileAtWorld(x: number, y: number) {
+  private resolveTileAtWorld(x: number, y: number) {
+    if (
+      x < this.boardLeft ||
+      x > this.boardLeft + this.tileSize * COLS ||
+      y < this.boardTop ||
+      y > this.boardTop + this.tileSize * ROWS
+    ) {
+      this.lastReason = 'out-of-board';
+      return null;
+    }
     for (let row = 0; row < ROWS; row += 1) {
       for (let col = 0; col < COLS; col += 1) {
         const tile = this.board[row][col];
         if (!tile) continue;
         if (tile.sprite.getBounds().contains(x, y)) {
+          this.lastReason = '';
           return tile;
         }
       }
     }
+    this.lastReason = 'no-hit';
     return null;
+  }
+
+  private updateDebugOverlay(
+    pointer?: Phaser.Input.Pointer,
+    worldX?: number,
+    worldY?: number,
+    hitTile?: Tile | null,
+  ) {
+    if (!this.debugText) return;
+    const activePointer = pointer ?? this.input.activePointer;
+    const p = activePointer.positionToCamera(this.cameras.main);
+    const screenX = Math.round(activePointer.x);
+    const screenY = Math.round(activePointer.y);
+    const wx = Math.round(worldX ?? p.x);
+    const wy = Math.round(worldY ?? p.y);
+    const hit = hitTile ?? this.lastHitTile;
+    const hitLabel = hit ? `(${hit.col},${hit.row},${hit.type})` : 'null';
+    this.debugText.setText([
+      `down/move/up: ${this.downCount}/${this.moveCount}/${this.upCount}`,
+      `isSelecting: ${this.isSelecting ? 'true' : 'false'}  pathLen: ${this.activePath.length}`,
+      `pointer: ${screenX},${screenY}  world: ${wx},${wy}`,
+      `hit tile: ${hitLabel}`,
+      `lastReason: ${this.lastReason || '-'}`,
+    ]);
   }
 
   private getTilePosition(row: number, col: number) {
