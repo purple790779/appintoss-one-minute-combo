@@ -1,10 +1,10 @@
 # Changelog
 
-## v0.4.5
+## v0.4.4
+- fix: mobile (Samsung Internet/Chrome) drag input on scaled boards now uses board-local coordinates.
+- fix: resolve TypeScript build error in pointer world coordinate handling.
 - debug: input overlay diagnostics via ?debugInput=1.
 - fix: prevent overlays from swallowing drag; ensure touch capture.
-
-## v0.4.4
 - fix: mobile drag-chain input fix (positionToCamera + bounds hit-test + polling).
 
 ## v0.4.3

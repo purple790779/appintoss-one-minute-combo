@@ -36,6 +36,7 @@ interface Tile {
 
 export class PlayScene extends Phaser.Scene {
   private board: Array<Array<Tile | null>> = [];
+  private boardRoot?: Phaser.GameObjects.Container;
   private tileSize = 48;
   private tileRadius = 18;
   private boardLeft = 0;
@@ -46,12 +47,14 @@ export class PlayScene extends Phaser.Scene {
   private inputLocked = true;
   private unsubscribe?: () => void;
   private isSelecting = false;
+  private activePointerId: number | null = null;
   private debugText?: Phaser.GameObjects.Text;
   private downCount = 0;
   private moveCount = 0;
   private upCount = 0;
   private lastReason = '';
   private lastHitTile: Tile | null = null;
+  private tmpV = new Phaser.Math.Vector2();
 
   constructor() {
     super('PlayScene');
@@ -59,8 +62,7 @@ export class PlayScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setBackgroundColor('#0f172a');
-    this.lineGraphics = this.add.graphics({ lineStyle: { width: 6, color: 0xffffff } });
-    this.lineGraphics.setDepth(10);
+    this.boardRoot = this.add.container(0, 0);
     if (DEBUG_INPUT_OVERLAY) {
       this.debugText = this.add
         .text(12, 12, '', {
@@ -76,6 +78,8 @@ export class PlayScene extends Phaser.Scene {
     }
 
     this.createBoard();
+    this.lineGraphics = this.add.graphics({ lineStyle: { width: 6, color: 0xffffff } });
+    this.boardRoot.add(this.lineGraphics);
     this.layoutBoard();
     this.registerInput();
 
@@ -118,6 +122,7 @@ export class PlayScene extends Phaser.Scene {
         const sprite = this.add.circle(position.x, position.y, this.tileRadius, TILE_COLORS[type]);
         sprite.setStrokeStyle(2, 0x0f172a);
         const label = this.createTileLabel(position.x, position.y, type);
+        this.boardRoot?.add([sprite, label].filter(Boolean) as Phaser.GameObjects.GameObject[]);
         this.board[row][col] = { row, col, type, sprite, label };
       }
     }
@@ -133,6 +138,9 @@ export class PlayScene extends Phaser.Scene {
       }
     }
     this.createBoard();
+    if (this.lineGraphics && this.boardRoot) {
+      this.boardRoot.add(this.lineGraphics);
+    }
     this.layoutBoard();
   }
 
@@ -148,6 +156,7 @@ export class PlayScene extends Phaser.Scene {
     const boardHeight = this.tileSize * ROWS;
     this.boardLeft = (width - boardWidth) / 2;
     this.boardTop = (height - boardHeight) / 2;
+    this.boardRoot?.setPosition(this.boardLeft, this.boardTop);
 
     for (let row = 0; row < ROWS; row += 1) {
       for (let col = 0; col < COLS; col += 1) {
@@ -171,11 +180,13 @@ export class PlayScene extends Phaser.Scene {
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       this.downCount += 1;
       if (this.inputLocked) return;
+      if (this.activePointerId !== null && this.activePointerId !== pointer.id) return;
       const p = this.getPointerWorld(pointer);
       const tile = this.resolveTileAtWorld(p.x, p.y);
       if (!tile) {
         return;
       }
+      this.activePointerId = pointer.id;
       this.activeType = tile.type;
       this.activePath = [tile];
       this.highlightTile(tile, true);
@@ -188,29 +199,32 @@ export class PlayScene extends Phaser.Scene {
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       this.moveCount += 1;
       if (this.inputLocked || !this.isSelecting) return;
+      if (this.activePointerId !== pointer.id) return;
       const p = this.getPointerWorld(pointer);
       const tile = this.resolveTileAtWorld(p.x, p.y);
       this.lastHitTile = tile;
       this.tryExtendPath(tile);
     });
 
-    const finishPath = () => {
+    const finishPath = (pointer: Phaser.Input.Pointer) => {
       if (this.inputLocked) return;
+      if (this.activePointerId !== pointer.id) return;
       if (this.activePath.length >= DRAG_MATCH_MIN) {
         void this.resolveMatch(this.activePath);
       } else {
         this.clearPath();
       }
       this.isSelecting = false;
+      this.activePointerId = null;
     };
 
-    this.input.on('pointerup', () => {
+    this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
       this.upCount += 1;
-      finishPath();
+      finishPath(pointer);
     });
-    this.input.on('pointerupoutside', () => {
+    this.input.on('pointerupoutside', (pointer: Phaser.Input.Pointer) => {
       this.upCount += 1;
-      finishPath();
+      finishPath(pointer);
     });
   }
 
@@ -220,6 +234,10 @@ export class PlayScene extends Phaser.Scene {
       return;
     }
     const pointer = this.input.activePointer;
+    if (this.activePointerId !== pointer.id) {
+      this.updateDebugOverlay();
+      return;
+    }
     const p = this.getPointerWorld(pointer);
     const tile = this.resolveTileAtWorld(p.x, p.y);
     this.lastHitTile = tile;
@@ -295,6 +313,7 @@ export class PlayScene extends Phaser.Scene {
     this.activePath = [];
     this.activeType = null;
     this.isSelecting = false;
+    this.activePointerId = null;
     this.redrawPath();
   }
 
@@ -423,27 +442,21 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private resolveTileAtWorld(x: number, y: number) {
+    const local = this.worldToBoardLocal(x, y);
     if (
-      x < this.boardLeft ||
-      x > this.boardLeft + this.tileSize * COLS ||
-      y < this.boardTop ||
-      y > this.boardTop + this.tileSize * ROWS
+      local.x < 0 ||
+      local.x >= this.tileSize * COLS ||
+      local.y < 0 ||
+      local.y >= this.tileSize * ROWS
     ) {
       this.lastReason = 'out-of-board';
       return null;
     }
-    for (let row = 0; row < ROWS; row += 1) {
-      for (let col = 0; col < COLS; col += 1) {
-        const tile = this.board[row][col];
-        if (!tile) continue;
-        if (tile.sprite.getBounds().contains(x, y)) {
-          this.lastReason = '';
-          return tile;
-        }
-      }
-    }
-    this.lastReason = 'no-hit';
-    return null;
+    const col = Math.floor(local.x / this.tileSize);
+    const row = Math.floor(local.y / this.tileSize);
+    const tile = this.board[row]?.[col] ?? null;
+    this.lastReason = tile ? '' : 'no-hit';
+    return tile;
   }
 
   private updateDebugOverlay(
@@ -471,13 +484,23 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private getPointerWorld(pointer: Phaser.Input.Pointer) {
-    return this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+    return { x: pointer.worldX, y: pointer.worldY };
   }
 
   private getTilePosition(row: number, col: number) {
     return {
-      x: this.boardLeft + col * this.tileSize + this.tileSize / 2,
-      y: this.boardTop + row * this.tileSize + this.tileSize / 2,
+      x: col * this.tileSize + this.tileSize / 2,
+      y: row * this.tileSize + this.tileSize / 2,
     };
+  }
+
+  private worldToBoardLocal(worldX: number, worldY: number) {
+    if (!this.boardRoot) {
+      this.tmpV.set(worldX, worldY);
+      return this.tmpV;
+    }
+    const matrix = this.boardRoot.getWorldTransformMatrix();
+    matrix.applyInverse(worldX, worldY, this.tmpV);
+    return this.tmpV;
   }
 }
