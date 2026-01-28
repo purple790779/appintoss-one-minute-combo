@@ -6,6 +6,7 @@
   color-scheme: light;
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --vh: 1vh;
 }
 
 * {
@@ -24,7 +25,7 @@ body {
   min-height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
-  touch-action: none;
+  -webkit-overflow-scrolling: auto;
   user-select: none;
   -webkit-user-select: none;
   font-family: 'Inter', system-ui, sans-serif;
@@ -32,12 +33,41 @@ body {
   color: #0f172a;
 }
 
+.safe-area-y {
+  padding-top: calc(1.5rem + var(--safe-area-top));
+}
+
+.app-shell {
+  height: calc(var(--vh, 1vh) * 100);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content {
+  flex: 1;
+  overflow: hidden;
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
+}
+
+.start-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.start-bar > * {
+  pointer-events: auto;
+}
+
+.game-container,
 canvas {
   display: block;
   touch-action: none;
-}
-
-.safe-area-y {
-  padding-top: calc(1.5rem + var(--safe-area-top));
-  padding-bottom: calc(12px + var(--safe-area-bottom));
 }

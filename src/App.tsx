@@ -76,82 +76,86 @@ function App() {
   const handleAction = gameState === 'PLAYING' ? restartGame : startGame;
 
   return (
-    <div className="safe-area-y flex min-h-full flex-col items-center gap-6 px-4">
-      <header className="flex w-full max-w-3xl flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-700 shadow-md">
-        <div className="flex flex-col">
-          <span className="text-xs uppercase tracking-widest text-slate-400">
-            Time
-          </span>
-          <span className="text-2xl font-semibold tabular-nums text-slate-900">
-            {formatTime(timeLeftMs)}
-          </span>
-        </div>
-        <div className="flex flex-col">
-          <span className="text-xs uppercase tracking-widest text-slate-400">
-            Score
-          </span>
-          <span className="text-2xl font-semibold tabular-nums text-slate-900">
-            {score}
-          </span>
-          <span
-            className={`text-[10px] font-semibold uppercase tracking-[0.35em] ${
-              combo > 0 ? 'text-emerald-500' : 'text-slate-300'
-            }`}
-          >
-            콤보 x{combo}
-          </span>
-        </div>
-        <div className="flex flex-col">
-          <span className="text-xs uppercase tracking-widest text-slate-400">
-            Best
-          </span>
-          <span className="text-2xl font-semibold tabular-nums text-slate-900">
-            {bestScore}
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+    <div className="app-shell safe-area-y">
+      <div className="app-content flex flex-col items-center gap-6 px-4">
+        <header className="flex w-full max-w-3xl flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-700 shadow-md">
+          <div className="flex flex-col">
+            <span className="text-xs uppercase tracking-widest text-slate-400">
+              Time
+            </span>
+            <span className="text-2xl font-semibold tabular-nums text-slate-900">
+              {formatTime(timeLeftMs)}
+            </span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xs uppercase tracking-widest text-slate-400">
+              Score
+            </span>
+            <span className="text-2xl font-semibold tabular-nums text-slate-900">
+              {score}
+            </span>
+            <span
+              className={`text-[10px] font-semibold uppercase tracking-[0.35em] ${
+                combo > 0 ? 'text-emerald-500' : 'text-slate-300'
+              }`}
+            >
+              콤보 x{combo}
+            </span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xs uppercase tracking-widest text-slate-400">
+              Best
+            </span>
+            <span className="text-2xl font-semibold tabular-nums text-slate-900">
+              {bestScore}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsHelpOpen(true)}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-widest text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-800"
+            >
+              Help
+            </button>
+            <button
+              type="button"
+              onClick={toggleSound}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-widest text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-800"
+            >
+              Sound: {soundEnabled ? 'On' : 'Off'}
+            </button>
+          </div>
+        </header>
+
+        <main className="flex w-full max-w-3xl flex-1 flex-col items-center gap-4">
+          <div className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-700 shadow-sm">
+            {statusLabel}
+          </div>
+          <div className="flex w-full max-w-lg items-center justify-center rounded-3xl border border-slate-200 bg-white p-4 shadow-xl">
+            <div
+              ref={phaserContainerRef}
+              className="game-container h-[70vh] max-h-[480px] w-[90vw] max-w-[360px] overflow-hidden rounded-2xl bg-slate-50"
+            />
+          </div>
+        </main>
+      </div>
+
+      {gameState === 'READY' ? (
+        <div className="start-bar">
           <button
             type="button"
-            onClick={() => setIsHelpOpen(true)}
-            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-widest text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-800"
+            onClick={handleAction}
+            className="rounded-full bg-emerald-500 px-10 py-3 text-sm font-semibold uppercase tracking-widest text-white shadow-lg transition active:translate-y-0.5 active:shadow-md"
           >
-            Help
-          </button>
-          <button
-            type="button"
-            onClick={toggleSound}
-            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-widest text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-800"
-          >
-            Sound: {soundEnabled ? 'On' : 'Off'}
+            {buttonLabel}
           </button>
         </div>
-      </header>
-
-      <main className="flex w-full max-w-3xl flex-1 flex-col items-center gap-4">
-        <div className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-700 shadow-sm">
-          {statusLabel}
-        </div>
-        <div className="flex w-full max-w-lg items-center justify-center rounded-3xl border border-slate-200 bg-white p-4 shadow-xl">
-          <div
-            ref={phaserContainerRef}
-            className="h-[70vh] max-h-[480px] w-[90vw] max-w-[360px] overflow-hidden rounded-2xl bg-slate-50"
-          />
-        </div>
-      </main>
-
-      <footer className="flex w-full max-w-3xl items-center justify-center">
-        <button
-          type="button"
-          onClick={handleAction}
-          className="rounded-full bg-emerald-500 px-10 py-3 text-sm font-semibold uppercase tracking-widest text-white shadow-lg transition active:translate-y-0.5 active:shadow-md"
-        >
-          {buttonLabel}
-        </button>
-      </footer>
+      ) : null}
 
       {isHelpOpen ? (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-900/40 px-4">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 text-slate-700 shadow-2xl">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 px-4">
+          <div className="max-h-[80vh] w-full max-w-md overflow-auto rounded-3xl border border-slate-200 bg-white p-6 text-slate-700 shadow-2xl">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-lg font-semibold text-slate-900">Help</h2>
               <button
