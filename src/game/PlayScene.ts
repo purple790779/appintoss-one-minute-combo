@@ -171,7 +171,7 @@ export class PlayScene extends Phaser.Scene {
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       this.downCount += 1;
       if (this.inputLocked) return;
-      const p = pointer.positionToCamera(this.cameras.main);
+      const p = this.getPointerWorld(pointer);
       const tile = this.resolveTileAtWorld(p.x, p.y);
       if (!tile) {
         return;
@@ -188,7 +188,7 @@ export class PlayScene extends Phaser.Scene {
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       this.moveCount += 1;
       if (this.inputLocked || !this.isSelecting) return;
-      const p = pointer.positionToCamera(this.cameras.main);
+      const p = this.getPointerWorld(pointer);
       const tile = this.resolveTileAtWorld(p.x, p.y);
       this.lastHitTile = tile;
       this.tryExtendPath(tile);
@@ -220,7 +220,7 @@ export class PlayScene extends Phaser.Scene {
       return;
     }
     const pointer = this.input.activePointer;
-    const p = pointer.positionToCamera(this.cameras.main);
+    const p = this.getPointerWorld(pointer);
     const tile = this.resolveTileAtWorld(p.x, p.y);
     this.lastHitTile = tile;
     if (pointer.isDown) {
@@ -454,7 +454,7 @@ export class PlayScene extends Phaser.Scene {
   ) {
     if (!this.debugText) return;
     const activePointer = pointer ?? this.input.activePointer;
-    const p = activePointer.positionToCamera(this.cameras.main);
+    const p = this.getPointerWorld(activePointer);
     const screenX = Math.round(activePointer.x);
     const screenY = Math.round(activePointer.y);
     const wx = Math.round(worldX ?? p.x);
@@ -468,6 +468,10 @@ export class PlayScene extends Phaser.Scene {
       `hit tile: ${hitLabel}`,
       `lastReason: ${this.lastReason || '-'}`,
     ]);
+  }
+
+  private getPointerWorld(pointer: Phaser.Input.Pointer) {
+    return this.cameras.main.getWorldPoint(pointer.x, pointer.y);
   }
 
   private getTilePosition(row: number, col: number) {
